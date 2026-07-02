@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roche Global Sites</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #08111f;
+      overflow: hidden;
+    }
+
+    #map { width: 100vw; height: 100vh; }
+
+    /* ── Header ───────────────────────────────────────── */
+    #header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(8,17,31,0.92) 0%, transparent 100%);
+    }
+
+    .logo-text {
+      font-size: 22px;
+      font-weight: 800;
+      color: #009FE3;
+      letter-spacing: 3px;
+    }
+
+    .logo-sep {
+      width: 1px;
+      height: 20px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .header-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Legend ───────────────────────────────────────── */
+    #legend {
+      position: absolute;
+      bottom: 36px;
+      left: 20px;
+      z-index: 1000;
+      background: rgba(8,17,31,0.88);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .legend-dot.hq  { background: #E8402A; box-shadow: 0 0 8px rgba(232,64,42,0.6); }
+    .legend-dot.reg { background: #009FE3; box-shadow: 0 0 8px rgba(0,159,227,0.5); }
+
+    /* ── Hint ─────────────────────────────────────────── */
+    #hint {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(8,17,31,0.85);
+      border: 1px solid rgba(0,159,227,0.25);
+      border-radius: 20px;
+      padding: 7px 18px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      pointer-events: none;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.4s;
+    }
+
+    #hint.hidden { opacity: 0; }
+
+    /* ── Side Panel ───────────────────────────────────── */
+    #panel {
+      position: absolute;
+      top: 0; right: -440px;
+      width: 420px;
+      height: 100vh;
+      z-index: 1001;
+      background: rgba(8, 17, 31, 0.97);
+      border-left: 1px solid rgba(0,159,227,0.18);
+      backdrop-filter: blur(20px);
+      transition: right 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,159,227,0.3) transparent;
+    }
+
+    #panel.open { right: 0; }
+
+    #panel::-webkit-scrollbar { width: 4px; }
+    #panel::-webkit-scrollbar-track { background: transparent; }
+    #panel::-webkit-scrollbar-thumb { background: rgba(0,159,227,0.3); border-radius: 2px; }
+
+    .panel-inner { padding: 28px 28px 40px; }
+
+    .panel-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+
+    .close-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      font-size: 18px;
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .close-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+
+    .site-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #009FE3;
+      margin-bottom: 6px;
+    }
+
+    .site-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: white;
+      line-height: 1.3;
+    }
+
+    .site-loc {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 4px;
+    }
+
+    /* ── Info cards ───────────────────────────────────── */
+    .cards-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .card-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: rgba(255,255,255,0.35);
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 30px;
+      font-weight: 700;
+      color: white;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+
+    .card-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 4px;
+      min-height: 14px;
+    }
+
+    /* ── News section ─────────────────────────────────── */
+    .section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: rgba(255,255,255,0.35);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .news-card {
+      background: rgba(0,159,227,0.07);
+      border: 1px solid rgba(0,159,227,0.18);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .news-meta {
+      font-size: 10px;
+      color: #009FE3;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .news-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: white;
+      line-height: 1.55;
+      margin-bottom: 10px;
+    }
+
+    .news-body {
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.65;
+    }
+
+    .news-link {
+      display: inline-block;
+      margin-top: 14px;
+      color: #009FE3;
+      font-size: 12px;
+      text-decoration: none;
+    }
+
+    .news-link:hover { text-decoration: underline; }
+
+    /* ── Skeleton loader ──────────────────────────────── */
+    .sk {
+      display: inline-block;
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.06) 0%,
+        rgba(255,255,255,0.12) 50%,
+        rgba(255,255,255,0.06) 100%);
+      background-size: 300% 100%;
+      animation: shimmer 1.4s ease infinite;
+      border-radius: 4px;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+
+    /* ── Leaflet overrides ────────────────────────────── */
+    .roche-marker-wrap {
+      cursor: pointer;
+    }
+
+    .dot {
+      border-radius: 50%;
+      border: 3px solid transparent;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .dot.reg {
+      width: 14px; height: 14px;
+      background: #009FE3;
+      border-color: rgba(0,159,227,0.35);
+      box-shadow: 0 0 10px rgba(0,159,227,0.5);
+    }
+
+    .dot.hq {
+      width: 18px; height: 18px;
+      background: #E8402A;
+      border-color: rgba(232,64,42,0.35);
+      box-shadow: 0 0 12px rgba(232,64,42,0.55);
+    }
+
+    .roche-marker-wrap:hover .dot {
+      transform: scale(1.45);
+      box-shadow: 0 0 22px rgba(0,159,227,0.85);
+    }
+
+    .roche-marker-wrap:hover .dot.hq {
+      box-shadow: 0 0 22px rgba(232,64,42,0.85);
+    }
+
+    .leaflet-tooltip.rt {
+      background: rgba(8,17,31,0.92);
+      border: 1px solid rgba(0,159,227,0.25);
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 11px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+
+    .leaflet-tooltip.rt .tt-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.45);
+      font-weight: 400;
+    }
+
+    .leaflet-tooltip.rt::before { border-top-color: rgba(0,159,227,0.25) !important; }
+
+    .leaflet-control-zoom a {
+      background: rgba(8,17,31,0.92) !important;
+      border: 1px solid rgba(255,255,255,0.12) !important;
+      color: rgba(255,255,255,0.7) !important;
+    }
+
+    .leaflet-control-zoom a:hover { color: white !important; }
+    .leaflet-control-attribution { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo-text">ROCHE</div>
+  <div class="logo-sep"></div>
+  <div class="header-sub">Global Sites Explorer</div>
+</div>
+
+<div id="map"></div>
+
+<div id="legend">
+  <div class="legend-item"><div class="legend-dot hq"></div>Global Headquarters</div>
+  <div class="legend-item"><div class="legend-dot reg"></div>Regional Site</div>
+</div>
+
+<div id="hint">Click any site marker to explore</div>
+
+<div id="panel">
+  <div class="panel-inner">
+    <div class="panel-top">
+      <div id="panel-header"></div>
+      <button class="close-btn" onclick="closePanel()">&#x2715;</button>
+    </div>
+    <div class="cards-row">
+      <div class="card">
+        <div class="card-label">Local Time</div>
+        <div class="card-value" id="time-val">--:--</div>
+        <div class="card-sub" id="date-val">&nbsp;</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Temperature</div>
+        <div class="card-value" id="temp-val"><span class="sk" style="width:56px;height:30px;display:block;"></span></div>
+        <div class="card-sub" id="weather-val">&nbsp;</div>
+      </div>
+    </div>
+    <div class="section-label" id="news-label">Good News</div>
+    <div id="news-area">
+      <div class="news-card">
+        <div class="sk" style="width:80px;height:10px;margin-bottom:12px;"></div>
+        <div class="sk" style="width:100%;height:16px;margin-bottom:7px;"></div>
+        <div class="sk" style="width:88%;height:16px;margin-bottom:14px;"></div>
+        <div class="sk" style="width:100%;height:12px;margin-bottom:6px;"></div>
+        <div class="sk" style="width:75%;height:12px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ── Site data ──────────────────────────────────────────────── */
+const SITES = [
+  // Switzerland
+  { name:'Roche Global Headquarters', city:'Basel',            country:'Switzerland',  lat:47.5596,  lon:7.5886,   tz:'Europe/Zurich',                      hq:true },
+  { name:'Roche Kaiseraugst',         city:'Kaiseraugst',      country:'Switzerland',  lat:47.5503,  lon:7.7603,   tz:'Europe/Zurich' },
+  { name:'Roche Rotkreuz',            city:'Rotkreuz',         country:'Switzerland',  lat:47.1426,  lon:8.4272,   tz:'Europe/Zurich' },
+  // Germany
+  { name:'Roche Diagnostics GmbH',    city:'Mannheim',         country:'Germany',      lat:49.4875,  lon:8.4660,   tz:'Europe/Berlin' },
+  { name:'Roche Penzberg',            city:'Penzberg',         country:'Germany',      lat:47.7506,  lon:11.3747,  tz:'Europe/Berlin' },
+  { name:'Roche Grenzach',            city:'Grenzach-Wyhlen',  country:'Germany',      lat:47.5397,  lon:7.6788,   tz:'Europe/Berlin' },
+  // USA
+  { name:'Genentech',                 city:'South San Francisco', country:'USA',        lat:37.6546,  lon:-122.4077,tz:'America/Los_Angeles' },
+  { name:'Roche Diagnostics N.A.',    city:'Indianapolis',     country:'USA',          lat:39.7684,  lon:-86.1581, tz:'America/Indiana/Indianapolis' },
+  { name:'Ventana / Roche',           city:'Tucson',           country:'USA',          lat:32.2226,  lon:-110.9747,tz:'America/Phoenix' },
+  { name:'Roche Molecular Systems',   city:'Pleasanton',       country:'USA',          lat:37.6624,  lon:-121.8747,tz:'America/Los_Angeles' },
+  // Canada
+  { name:'Roche Canada',              city:'Mississauga',      country:'Canada',       lat:43.5890,  lon:-79.6441, tz:'America/Toronto' },
+  // Latin America
+  { name:'Roche Mexico',              city:'Mexico City',      country:'Mexico',       lat:19.4326,  lon:-99.1332, tz:'America/Mexico_City' },
+  { name:'Roche Brazil',              city:'São Paulo',        country:'Brazil',       lat:-23.5505, lon:-46.6333, tz:'America/Sao_Paulo' },
+  { name:'Roche Argentina',           city:'Buenos Aires',     country:'Argentina',    lat:-34.6037, lon:-58.3816, tz:'America/Argentina/Buenos_Aires' },
+  // Europe
+  { name:'Roche UK',                  city:'Burgess Hill',     country:'UK',           lat:50.9594,  lon:-0.1245,  tz:'Europe/London' },
+  { name:'Roche Ireland',             city:'Clonmel',          country:'Ireland',      lat:52.3543,  lon:-7.7028,  tz:'Europe/Dublin' },
+  { name:'Roche France',              city:'Boulogne-Billancourt', country:'France',   lat:48.8330,  lon:2.2481,   tz:'Europe/Paris' },
+  { name:'Roche Italy',               city:'Milan',            country:'Italy',        lat:45.4654,  lon:9.1859,   tz:'Europe/Rome' },
+  { name:'Roche Spain',               city:'Madrid',           country:'Spain',        lat:40.4168,  lon:-3.7038,  tz:'Europe/Madrid' },
+  { name:'Roche Netherlands',         city:'Woerden',          country:'Netherlands',  lat:52.0883,  lon:4.8813,   tz:'Europe/Amsterdam' },
+  { name:'Roche Poland',              city:'Warsaw',           country:'Poland',       lat:52.2297,  lon:21.0122,  tz:'Europe/Warsaw' },
+  { name:'Roche Turkey',              city:'Istanbul',         country:'Turkey',       lat:41.0082,  lon:28.9784,  tz:'Europe/Istanbul' },
+  { name:'Roche Russia',              city:'Moscow',           country:'Russia',       lat:55.7558,  lon:37.6173,  tz:'Europe/Moscow' },
+  // Middle East & Africa
+  { name:'Roche Kenya',               city:'Nairobi',          country:'Kenya',        lat:-1.2921,  lon:36.8219,  tz:'Africa/Nairobi' },
+  { name:'Roche Morocco',             city:'Casablanca',       country:'Morocco',      lat:33.5731,  lon:-7.5898,  tz:'Africa/Casablanca' },
+  { name:'Roche Gulf',                city:'Dubai',            country:'UAE',          lat:25.2048,  lon:55.2708,  tz:'Asia/Dubai' },
+  { name:'Roche Saudi Arabia',        city:'Riyadh',           country:'Saudi Arabia', lat:24.6877,  lon:46.7219,  tz:'Asia/Riyadh' },
+  // Asia Pacific
+  { name:'Roche India',               city:'Mumbai',           country:'India',        lat:19.0760,  lon:72.8777,  tz:'Asia/Kolkata' },
+  { name:'Roche China',               city:'Shanghai',         country:'China',        lat:31.2304,  lon:121.4737, tz:'Asia/Shanghai' },
+  { name:'Roche Beijing',             city:'Beijing',          country:'China',        lat:39.9042,  lon:116.4074, tz:'Asia/Shanghai' },
+  { name:'Roche Suzhou',             city:'Suzhou',           country:'China',        lat:31.2989,  lon:120.5853, tz:'Asia/Shanghai' },
+  { name:'Roche Japan',               city:'Tokyo',            country:'Japan',        lat:35.6762,  lon:139.6503, tz:'Asia/Tokyo' },
+  { name:'Roche Korea',               city:'Seoul',            country:'South Korea',  lat:37.5665,  lon:126.9780, tz:'Asia/Seoul' },
+  { name:'Roche Singapore',           city:'Singapore',        country:'Singapore',    lat:1.3521,   lon:103.8198, tz:'Asia/Singapore' },
+  { name:'Roche Taiwan',              city:'Taipei',           country:'Taiwan',       lat:25.0330,  lon:121.5654, tz:'Asia/Taipei' },
+  { name:'Roche Australia',           city:'Sydney',           country:'Australia',    lat:-33.8688, lon:151.2093, tz:'Australia/Sydney' },
+  { name:'Roche New Zealand',         city:'Auckland',         country:'New Zealand',  lat:-36.8485, lon:174.7633, tz:'Pacific/Auckland' },
+];
+
+/* ── Map init ───────────────────────────────────────────────── */
+const map = L.map('map', {
+  center: [25, 10],
+  zoom: 2,
+  zoomControl: false,
+  minZoom: 2,
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+/* ── Markers ────────────────────────────────────────────────── */
+SITES.forEach(site => {
+  const cls = site.hq ? 'hq' : 'reg';
+  const size = site.hq ? 18 : 14;
+  const anchor = size / 2;
+
+  const icon = L.divIcon({
+    html: `<div class="roche-marker-wrap"><div class="dot ${cls}"></div></div>`,
+    className: '',
+    iconSize:   [size, size],
+    iconAnchor: [anchor, anchor],
+  });
+
+  const marker = L.marker([site.lat, site.lon], { icon }).addTo(map);
+
+  marker.bindTooltip(
+    `<span class="tt-sub">${site.city}, ${site.country}</span><br>${site.name}`,
+    { className: 'rt', direction: 'top', offset: [0, -6] }
+  );
+
+  marker.on('click', () => openSite(site));
+});
+
+/* ── Panel logic ────────────────────────────────────────────── */
+let clockTimer = null;
+
+function openSite(site) {
+  // Header
+  document.getElementById('panel-header').innerHTML = `
+    <div class="site-label">${site.hq ? 'Global HQ' : site.country}</div>
+    <div class="site-name">${site.name}</div>
+    <div class="site-loc">${site.city}, ${site.country}</div>
+  `;
+
+  // Reset weather
+  document.getElementById('temp-val').innerHTML = `<span class="sk" style="width:56px;height:30px;display:block;"></span>`;
+  document.getElementById('weather-val').innerHTML = '&nbsp;';
+
+  // Reset news
+  document.getElementById('news-label').textContent = `Good News from ${site.city}`;
+  document.getElementById('news-area').innerHTML = `
+    <div class="news-card">
+      <div class="sk" style="width:80px;height:10px;margin-bottom:12px;"></div>
+      <div class="sk" style="width:100%;height:16px;margin-bottom:7px;"></div>
+      <div class="sk" style="width:88%;height:16px;margin-bottom:14px;"></div>
+      <div class="sk" style="width:100%;height:12px;margin-bottom:6px;"></div>
+      <div class="sk" style="width:72%;height:12px;"></div>
+    </div>`;
+
+  // Open panel
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('hint').classList.add('hidden');
+
+  // Clock
+  if (clockTimer) clearInterval(clockTimer);
+  tickClock(site.tz);
+  clockTimer = setInterval(() => tickClock(site.tz), 1000);
+
+  // Async fetches
+  fetchWeather(site.lat, site.lon);
+  fetchNews(site.city, site.country);
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+}
+
+/* ── Clock ──────────────────────────────────────────────────── */
+function tickClock(tz) {
+  const now = new Date();
+  const tEl = document.getElementById('time-val');
+  const dEl = document.getElementById('date-val');
+  if (!tEl) return;
+
+  tEl.textContent = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+  }).format(now);
+
+  dEl.textContent = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+  }).format(now);
+}
+
+/* ── Weather ────────────────────────────────────────────────── */
+async function fetchWeather(lat, lon) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,wind_speed_10m&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+    const r   = await fetch(url);
+    const d   = await r.json();
+    const cur = d.current;
+
+    const tEl = document.getElementById('temp-val');
+    const wEl = document.getElementById('weather-val');
+    if (!tEl) return;
+
+    tEl.textContent = `${Math.round(cur.temperature_2m)}°F`;
+    wEl.textContent = `${wmoLabel(cur.weathercode)} · ${Math.round(cur.wind_speed_10m)} mph`;
+  } catch {
+    const tEl = document.getElementById('temp-val');
+    if (tEl) tEl.textContent = '--°C';
+  }
+}
+
+function wmoLabel(code) {
+  if (code === 0)                return 'Clear sky';
+  if (code <= 3)                 return 'Partly cloudy';
+  if (code === 45 || code === 48) return 'Foggy';
+  if (code >= 51 && code <= 55)  return 'Drizzle';
+  if (code >= 61 && code <= 65)  return 'Rain';
+  if (code >= 71 && code <= 75)  return 'Snow';
+  if (code >= 80 && code <= 82)  return 'Rain showers';
+  if (code >= 85 && code <= 86)  return 'Snow showers';
+  if (code === 95)               return 'Thunderstorm';
+  if (code >= 96)                return 'Hail storm';
+  return 'Variable';
+}
+
+/* ── News ───────────────────────────────────────────────────── */
+async function fetchNews(city, country) {
+  const area = document.getElementById('news-area');
+  if (!area) return;
+
+  const BAD = ['killed','dead','murder','attack','crash','fatal','shooting','stabbed'];
+  const isGood = i => i.title && i.title.length > 15 && !BAD.some(w => i.title.toLowerCase().includes(w));
+  const pick   = arr => arr[Math.floor(Math.random() * Math.min(arr.length, 6))];
+  const sig    = () => AbortSignal.timeout(7000);
+
+  const GNN   = 'https://www.goodnewsnetwork.org/feed/';
+  const gNews = q => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+
+  // rss2json.com: dedicated CORS-friendly RSS→JSON service, no key needed for basic use
+  const viaRss2Json = async (rssUrl) => {
+    const r = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`, { signal: sig() });
+    if (!r.ok) return [];
+    const d = await r.json();
+    if (d.status !== 'ok' || !d.items?.length) return [];
+    return d.items.map(i => ({
+      title: (i.title || '').replace(/\s+-\s+[^-]+$/, '').trim(),
+      link:  i.link || '',
+      desc:  (i.description || '').replace(/<[^>]+>/g, '').trim().slice(0, 240),
+    })).filter(isGood);
+  };
+
+  // Raw proxy fallback — parse RSS XML ourselves
+  const viaProxy = async (proxyBase, rssUrl) => {
+    const r = await fetch(proxyBase + encodeURIComponent(rssUrl), { signal: sig() });
+    if (!r.ok) return [];
+    const doc = new DOMParser().parseFromString(await r.text(), 'text/xml');
+    return [...doc.querySelectorAll('item')].map(item => {
+      const g = tag => (item.querySelector(tag)?.textContent || '').replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+      return { title: g('title').replace(/\s+-\s+[^-]+$/, '').trim(), link: g('link') || g('guid'), desc: g('description').replace(/<[^>]+>/g, '').trim().slice(0, 240) };
+    }).filter(isGood);
+  };
+
+  // Ordered attempts — Good News Network appears early so something always shows
+  const attempts = [
+    { fn: () => viaRss2Json(gNews(`"${city}" good news OR award OR achievement OR breakthrough`)), label: city },
+    { fn: () => viaRss2Json(GNN),                                                                  label: 'Good News Network' },
+    { fn: () => viaRss2Json(gNews(`${city} good news`)),                                           label: city },
+    { fn: () => viaRss2Json(gNews(`${country} good news OR breakthrough`)),                        label: country },
+    { fn: () => viaProxy('https://api.allorigins.win/raw?url=', GNN),                             label: 'Good News Network' },
+    { fn: () => viaProxy('https://corsproxy.io/?url=',          GNN),                             label: 'Good News Network' },
+    { fn: () => viaProxy('https://api.allorigins.win/raw?url=', gNews(`${city} good news`)),      label: city },
+  ];
+
+  let story = null, label = 'Good News';
+  for (const a of attempts) {
+    try {
+      const items = await a.fn();
+      if (items.length) { story = pick(items); label = a.label; break; }
+    } catch { /* try next */ }
+  }
+
+  if (!area) return;
+
+  if (story) {
+    area.innerHTML = `
+      <div class="news-card">
+        <div class="news-meta">${esc(label)}</div>
+        <div class="news-title">${esc(story.title)}</div>
+        ${story.desc ? `<div class="news-body">${esc(story.desc)}</div>` : ''}
+        <a class="news-link" href="${story.link}" target="_blank" rel="noopener noreferrer">Read full story &rarr;</a>
+      </div>`;
+  } else {
+    area.innerHTML = `
+      <div class="news-card">
+        <div class="news-meta">Good News Network</div>
+        <div class="news-title">Browse today's uplifting stories from around the world.</div>
+        <a class="news-link" href="https://www.goodnewsnetwork.org" target="_blank" rel="noopener noreferrer">Open Good News Network &rarr;</a>
+      </div>`;
+  }
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.appendChild(document.createTextNode(str));
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
